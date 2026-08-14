@@ -22,5 +22,6 @@
 - オフライン対応PWA
 
 ## GitHub Pages
-`.github/workflows/pages.yml` を含みます。新規リポジトリへ配置後、
-Settings → Pages → Source を GitHub Actions に設定してください。
+GitHub Actionsで公開します。
+
+https://ken303867-png.github.io/swallow-exam-338/
