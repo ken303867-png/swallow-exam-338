@@ -1,0 +1,39 @@
+name: Apply unanswered filter
+
+on:
+  push:
+    branches: [feature/unanswered-filter]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/unanswered-filter
+      - name: Apply unanswered filter
+        run: python3 scripts/add_unanswered_filter.py
+      - name: Validate app
+        run: |
+          cat app.part1 app.part2 > /tmp/app.js
+          node --check /tmp/app.js
+          grep -q 'id="answerStatus"' app.part1
+          grep -q "st.answerStatus==='unanswered'" app.part1
+          grep -q "existingProg(q.id)?.attempts||0" app.part1
+          grep -q "'answerStatus'" app.part2
+          grep -q 'swallow-exam-338-v6-unanswered-filter' sw.js
+          node -e "const d=require('./data.json'); if(d.questions.length!==338) process.exit(1); console.log('questions='+d.questions.length)"
+      - name: Commit patched app
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.part1 app.part2 sw.js
+          if git diff --cached --quiet; then
+            echo "No app changes to commit"
+            exit 0
+          fi
+          git commit -m "Add all vs unanswered study filter"
+          git push origin HEAD:feature/unanswered-filter
