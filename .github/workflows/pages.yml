@@ -1,0 +1,49 @@
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Validate app data
+        run: |
+          python3 - <<'PY'
+          import json
+          with open('data.json', encoding='utf-8') as f:
+              d=json.load(f)
+          q=d.get('questions', [])
+          assert len(q)==338, f'Expected 338 questions, got {len(q)}'
+          assert d.get('meta',{}).get('general')==178
+          assert d.get('meta',{}).get('caseQuestions')==160
+          assert d.get('meta',{}).get('cases')==61
+          print('Validated:', len(q), 'questions')
+          PY
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: .
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
