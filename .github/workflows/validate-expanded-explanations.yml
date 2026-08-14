@@ -1,0 +1,22 @@
+name: Validate expanded explanations
+
+on:
+  push:
+    branches: [feature/expand-all-explanations]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate explanation expansion
+        run: |
+          node --check expand-explanations.js
+          grep -q "detail.open=true" expand-explanations.js
+          grep -q './expand-explanations.js' index.html
+          grep -q './expand-explanations.js' sw.js
+          grep -q 'swallow-exam-338-v4-explanations' sw.js
+          node -e "const d=require('./data.json'); if(d.questions.length!==338) process.exit(1); console.log('questions='+d.questions.length)"
