@@ -25,3 +25,5 @@
 GitHub Actionsで公開します。
 
 https://ken303867-png.github.io/swallow-exam-338/
+
+Pages source: GitHub Actions
