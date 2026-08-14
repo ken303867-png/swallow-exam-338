@@ -1,0 +1,109 @@
+   <h3>メモ</h3><textarea id="note" placeholder="この問題のメモ">${esc(prog(q.id).note||'')}</textarea>
+ </div></div>`;
+}
+function answer(choice){
+ const ses=state.session,q=Q.get(ses.ids[ses.index]);if(ses.answers[q.id])return;
+ const p=prog(q.id),correct=choice===q.correct_answer;
+ p.attempts++;p.lastAnswer=choice;p.lastCorrect=correct;p.updatedAt=new Date().toISOString();correct?p.correctCount++:p.incorrectCount++;
+ ses.answers[q.id]={choice,correct,at:new Date().toISOString()};saveState();render();
+}
+function nextQuestion(){const ses=state.session;ses.index++;saveState();if(ses.index>=ses.ids.length){finishSession();}else render();window.scrollTo({top:0,behavior:'smooth'});}
+function finishSession(){
+ const ses=state.session;let c=0,w=0;for(const id of ses.ids){const a=ses.answers[id];if(a){a.correct?c++:w++;}}
+ state.lastResult={total:ses.ids.length,answered:c+w,correct:c,wrong:w,finishedAt:new Date().toISOString(),ids:[...ses.ids]};state.session=null;saveState();view={name:'result'};render();
+}
+function result(){
+ const r=state.lastResult;if(!r){view={name:'home'};return home();}
+ return shell(`
+ <section class="hero"><h1>学習結果</h1><p>今回のセッション</p></section>
+ <section class="card result-score"><div class="score">${fmtPct(r.correct,r.answered)}</div><div class="label">${r.correct} / ${r.answered} 正解</div></section>
+ <div class="kpis" style="margin-top:11px"><div class="kpi"><strong>${r.total}</strong><span>出題</span></div><div class="kpi"><strong>${r.answered}</strong><span>解答</span></div><div class="kpi"><strong>${r.correct}</strong><span>正解</span></div><div class="kpi"><strong>${r.wrong}</strong><span>誤答</span></div></div>
+ <div class="actions" style="margin-top:16px"><button class="btn primary" data-nav="home">ホームへ</button><button class="btn" id="reviewWrong">今回の誤答を復習</button></div>
+ `,'結果');
+}
+function browse(){
+ let arr=DB.questions;
+ if(view.browseGroup!=='all')arr=arr.filter(q=>q.question_group===view.browseGroup);
+ if(view.browseDomain!=='all')arr=arr.filter(q=>q.domain===view.browseDomain);
+ const query=(view.browseQuery||'').trim().toLowerCase();if(query)arr=arr.filter(q=>[q.id,q.question_text,q.domain,q.case_title,q.case_text].some(v=>String(v||'').toLowerCase().includes(query)));
+ const domains=[...new Set(DB.questions.map(q=>q.domain).filter(Boolean))].sort();
+ return shell(`
+ <section class="hero"><h1>問題一覧・検索</h1><p>${arr.length}問を表示</p></section>
+ <section class="card"><div class="form-grid">
+  <label class="field"><span>検索</span><input type="text" id="search" value="${esc(view.browseQuery||'')}" placeholder="問題文・ID・分野・事例"></label>
+  <label class="field"><span>問題種別</span><select id="bgroup"><option value="all">すべて</option><option value="一般問題"${view.browseGroup==='一般問題'?' selected':''}>一般問題</option><option value="状況設定・事例問題"${view.browseGroup==='状況設定・事例問題'?' selected':''}>状況設定・事例問題</option></select></label>
+  <label class="field"><span>分野</span><select id="bdomain"><option value="all">すべて</option>${domains.map(x=>`<option value="${esc(x)}"${view.browseDomain===x?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
+ </div></section>
+ <div class="list" style="margin-top:11px">${arr.slice(0,300).map(q=>{const p=existingProg(q.id);return `<button class="list-item" data-open="${esc(q.id)}"><div class="chips"><span class="chip">${esc(q.question_group)}</span><span class="chip gray">${esc(q.id)}</span>${p?.incorrectCount?'<span class="chip badge-danger">誤答あり</span>':''}${p?.uncertain?'<span class="chip">自信なし</span>':''}</div><div class="title">${esc(q.question_text)}</div><div class="meta">${esc(q.domain||'')}　${esc(q.dataset||'')}</div></button>`}).join('')||'<div class="empty">該当する問題はありません</div>'}</div>
+ ${arr.length>300?'<div class="small" style="padding:12px">表示件数が多いため先頭300問を表示しています。検索で絞り込んでください。</div>':''}
+ `,'問題一覧');
+}
+function openDetail(id){
+ const q=Q.get(id),p=prog(id);if(!q)return;
+ const bg=document.createElement('div');bg.className='modal-bg';bg.innerHTML=`<div class="modal"><h2>${esc(q.id)}｜${esc(q.domain||'')}</h2>${q.case_text?`<div class="point" style="margin-bottom:10px"><strong>${esc(q.case_title||'事例')}</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(q.case_text)}</div></div>`:''}<div class="q-text">${text(q.question_text)}</div><div class="options">${['A','B','C','D'].map(L=>`<div class="option ${L===q.correct_answer?'correct':''}"><span class="letter">${L}</span><span>${text(q['option_'+L])}</span></div>`).join('')}</div><hr><div class="text">${text(q.explanation||'')}</div>${q.key_points?`<h3>覚えるべきポイント</h3><div class="point">${text(q.key_points)}</div>`:''}<h3>メモ</h3><textarea id="modalNote">${esc(p.note||'')}</textarea><div class="actions" style="margin-top:10px"><button class="btn ${p.uncertain?'active':''}" id="mUncertain">△ 自信なし</button><button class="btn ${p.favorite?'active':''}" id="mFavorite">☆ お気に入り</button><button class="btn" id="close">閉じる</button></div></div>`;
+ document.body.appendChild(bg);bg.onclick=e=>{if(e.target===bg)bg.remove()};bg.querySelector('#close').onclick=()=>{p.note=bg.querySelector('#modalNote').value;p.updatedAt=new Date().toISOString();saveState();bg.remove();render();};bg.querySelector('#mUncertain').onclick=()=>{p.uncertain=!p.uncertain;p.updatedAt=new Date().toISOString();saveState();bg.remove();openDetail(id)};bg.querySelector('#mFavorite').onclick=()=>{p.favorite=!p.favorite;p.updatedAt=new Date().toISOString();saveState();bg.remove();openDetail(id)};
+}
+function settings(){
+ const s=stat();return shell(`
+ <section class="hero"><h1>設定・バックアップ</h1><p>学習データはこの端末内に保存されます</p></section>
+ <section class="card"><h2 class="section-title" style="margin-top:0">表示</h2><div class="form-grid">
+  <label class="field"><span>テーマ</span><select id="theme"><option value="system"${state.settings.theme==='system'?' selected':''}>端末設定</option><option value="light"${state.settings.theme==='light'?' selected':''}>ライト</option><option value="dark"${state.settings.theme==='dark'?' selected':''}>ダーク</option></select></label>
+  <label class="field"><span>文字サイズ</span><select id="font"><option value="0.94"${state.settings.fontScale===.94?' selected':''}>小さめ</option><option value="1"${state.settings.fontScale===1?' selected':''}>標準</option><option value="1.08"${state.settings.fontScale===1.08?' selected':''}>大きめ</option><option value="1.16"${state.settings.fontScale===1.16?' selected':''}>特大</option></select></label>
+ </div></section>
+ <section class="card" style="margin-top:12px"><h2 class="section-title" style="margin-top:0">学習データ</h2><div class="small" style="margin-bottom:12px">学習済み ${s.answered}問 ／ 解答 ${s.attempts}回 ／ 正答率 ${fmtPct(s.correct,s.attempts)}</div><div class="actions"><button class="btn primary" id="backup">JSONバックアップを書き出す</button><label class="btn">JSONバックアップを読み込む<input id="restoreFile" type="file" accept="application/json,.json" class="hidden"></label><button class="btn" id="undoRestore">読み込み前に戻す</button></div></section>
+ <section class="card" style="margin-top:12px"><h2 class="section-title" style="margin-top:0">データの削除</h2><p class="small">このアプリの学習履歴・お気に入り・自信なし・メモだけを削除します。</p><button class="btn danger" id="reset">学習データをすべて削除</button></section>
+ `,'設定');
+}
+function exportBackup(){
+ const payload={format:BACKUP_FORMAT,appId:'swallow-exam-338',exportedAt:new Date().toISOString(),data:{progress:state.progress,settings:state.settings}};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),name='swallow-exam-338-backup-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+ const file=new File([blob],name,{type:'application/json'});
+ (async()=>{try{if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({title:'試験対策338問 バックアップ',files:[file]});return;}}catch(e){if(e?.name==='AbortError')return;}
+ const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1800);toast('JSONバックアップを書き出しました');})();
+}
+async function importBackup(file){
+ try{const x=JSON.parse(await file.text());if(x?.format!==BACKUP_FORMAT||x?.appId!=='swallow-exam-338'||!x?.data?.progress)throw new Error('このアプリ用のバックアップではありません');
+ if(!confirm('バックアップを読み込みます。現在の学習履歴は上書きされます。'))return;
+ sessionStorage.setItem(RESTORE_KEY,JSON.stringify({progress:state.progress,settings:state.settings}));state.progress=x.data.progress||{};state.settings=Object.assign({theme:'system',fontScale:1},x.data.settings||{});state.session=null;saveState();applySettings();render();toast('バックアップを読み込みました');
+ }catch(e){alert('読み込みに失敗しました: '+(e.message||e));}
+}
+function undoRestore(){try{const raw=sessionStorage.getItem(RESTORE_KEY);if(!raw){toast('この起動中に戻せるデータはありません');return;}if(!confirm('読み込み前の状態へ戻しますか？'))return;const x=JSON.parse(raw);state.progress=x.progress||{};state.settings=x.settings||state.settings;state.session=null;saveState();sessionStorage.removeItem(RESTORE_KEY);applySettings();render();}catch(e){alert('復元に失敗しました')}}
+function resetAll(){if(!confirm('このアプリの学習履歴をすべて削除しますか？\n元に戻せません。'))return;state=defaultState();localStorage.removeItem(APP_KEY);applySettings();view={name:'home'};render();toast('学習データを削除しました');}
+
+function bind(){
+ bindCommon();
+ if(view.name==='home'){
+  document.querySelector('#resume')?.addEventListener('click',()=>{view={name:'quiz'};render()});
+  document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{view={name:'setup',setup:{group:b.dataset.start,review:null,dataset:'all',domain:'all',importance:'all',order:'random',count:b.dataset.start==='状況設定・事例問題'?'5':'20'}};render()});
+  document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>{view={name:'setup',setup:{group:'all',review:b.dataset.review,dataset:'all',domain:'all',importance:'all',order:'random',count:'20'}};render()});
+ }
+ if(view.name==='setup'){
+  const update=()=>{const old=view.setup,group=document.querySelector('#group').value;view.setup={...old,group,dataset:document.querySelector('#dataset').value,domain:document.querySelector('#domain').value,importance:document.querySelector('#importance').value,count:document.querySelector('#count').value,order:document.querySelector('#order').value};const a=setupFilters();const cases=new Set(a.map(q=>q.case_id).filter(Boolean));document.querySelector('#available').textContent=`対象：${a.length}問${group==='状況設定・事例問題'&&!view.setup.review?'（'+cases.size+'事例）':''}`;};
+  ['group','dataset','domain','importance','count','order'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',()=>{update();if(id==='group')render();}));update();document.querySelector('#go').onclick=startFromSetup;
+ }
+ if(view.name==='quiz'){
+  document.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>answer(b.dataset.choice));
+  const q=Q.get(state.session.ids[state.session.index]),p=prog(q.id);
+  document.querySelector('#uncertain').onclick=()=>{p.uncertain=!p.uncertain;p.updatedAt=new Date().toISOString();saveState();render()};
+  document.querySelector('#favorite').onclick=()=>{p.favorite=!p.favorite;p.updatedAt=new Date().toISOString();saveState();render()};
+  const n=document.querySelector('#note');if(n)n.addEventListener('change',()=>{p.note=n.value;p.updatedAt=new Date().toISOString();saveState()});
+  document.querySelector('#next')?.addEventListener('click',nextQuestion);
+ }
+ if(view.name==='result')document.querySelector('#reviewWrong')?.addEventListener('click',()=>{view={name:'setup',setup:{group:'all',review:'wrong',dataset:'all',domain:'all',importance:'all',order:'random',count:'20'}};render()});
+ if(view.name==='browse'){
+  document.querySelector('#search').addEventListener('input',e=>{view.browseQuery=e.target.value;clearTimeout(view._t);view._t=setTimeout(render,250)});document.querySelector('#bgroup').onchange=e=>{view.browseGroup=e.target.value;render()};document.querySelector('#bdomain').onchange=e=>{view.browseDomain=e.target.value;render()};document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDetail(b.dataset.open));
+ }
+ if(view.name==='settings'){
+  document.querySelector('#theme').onchange=e=>{state.settings.theme=e.target.value;saveState();applySettings();render()};document.querySelector('#font').onchange=e=>{state.settings.fontScale=Number(e.target.value);saveState();applySettings();render()};document.querySelector('#backup').onclick=exportBackup;document.querySelector('#restoreFile').onchange=e=>{const f=e.target.files?.[0];if(f)importBackup(f);e.target.value=''};document.querySelector('#undoRestore').onclick=undoRestore;document.querySelector('#reset').onclick=resetAll;
+ }
+}
+function render(){
+ let html;if(view.name==='home')html=home();else if(view.name==='setup')html=setup(view.setup?.group,view.setup?.review);else if(view.name==='quiz')html=quiz();else if(view.name==='result')html=result();else if(view.name==='browse')html=browse();else if(view.name==='settings')html=settings();else html=home();root.innerHTML=html;bind();
+}
+async function init(){
+ try{const r=await fetch('./data.json',{cache:'no-store'});if(!r.ok)throw new Error('問題データを読み込めません（HTTP '+r.status+'）');DB=await r.json();if(!Array.isArray(DB.questions)||DB.questions.length!==338)throw new Error('問題データの件数が不正です');Q=new Map(DB.questions.map(q=>[q.id,q]));applySettings();render();
+ if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(console.warn)}
+ }catch(e){console.error(e);root.innerHTML=`<div class="boot"><div><strong>アプリを読み込めませんでした</strong><p>${esc(e.message||e)}</p><button class="btn" onclick="location.reload()">再読み込み</button></div></div>`}
+}
+init();
+})();
