@@ -1,0 +1,14 @@
+{
+  "name": "摂食嚥下認定看護師 試験対策338問",
+  "short_name": "嚥下338",
+  "description": "一般問題178問＋状況設定160問を学習できるオフライン対応PWA",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f7f7",
+  "theme_color": "#0f766e",
+  "icons": [
+    {"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
