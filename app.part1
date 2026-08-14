@@ -1,0 +1,168 @@
+
+(()=>{'use strict';
+const APP_KEY='swallow_exam_338_state_v1';
+const RESTORE_KEY='swallow_exam_338_restore_v1';
+const BACKUP_FORMAT='swallow-exam-338-backup-v1';
+const root=document.getElementById('app');
+let DB={meta:{},questions:[]}, Q=new Map(), state=loadState();
+let view={name:'home',setup:null,browseQuery:'',browseGroup:'all',browseDomain:'all'};
+
+function defaultState(){return{version:1,progress:{},settings:{theme:'system',fontScale:1},session:null,lastResult:null};}
+function loadState(){try{const x=JSON.parse(localStorage.getItem(APP_KEY)||'null');return x&&x.version===1?Object.assign(defaultState(),x):defaultState();}catch(e){return defaultState();}}
+function saveState(){try{localStorage.setItem(APP_KEY,JSON.stringify(state));}catch(e){console.warn(e);toast('学習履歴の保存に失敗しました');}}
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function text(v){return esc(v).replace(/\n/g,'<br>');}
+function fmtPct(n,d){return d?Math.round(n/d*100)+'%':'—';}
+function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
+function prog(id){return state.progress[id]||(state.progress[id]={attempts:0,correctCount:0,incorrectCount:0,lastCorrect:null,lastAnswer:null,uncertain:false,favorite:false,note:'',updatedAt:null});}
+function existingProg(id){return state.progress[id]||null;}
+function applySettings(){
+ let theme=state.settings.theme||'system';
+ if(theme==='system')theme=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+ document.documentElement.dataset.theme=theme;
+ document.documentElement.style.setProperty('--font-scale',String(state.settings.fontScale||1));
+}
+function toast(msg){document.querySelector('.toast')?.remove();const d=document.createElement('div');d.className='toast';d.textContent=msg;document.body.appendChild(d);setTimeout(()=>d.remove(),2200);}
+function topbar(title='試験対策338問'){return `<div class="topbar"><div class="topbar-in"><button class="icon-btn" data-nav="home" aria-label="ホーム">⌂</button><div class="brand">${esc(title)}</div><button class="icon-btn" data-nav="settings" aria-label="設定">⚙︎</button></div></div>`}
+function shell(body,title){return `${topbar(title)}<main class="shell">${body}</main>`}
+function bindCommon(){
+ document.querySelectorAll('[data-nav]').forEach(b=>b.onclick=()=>{const n=b.dataset.nav;
+   if(n==='home')view={name:'home'};
+   else if(n==='browse')view={name:'browse',browseQuery:'',browseGroup:'all',browseDomain:'all'};
+   else view={name:n};
+   render();
+ });
+}
+function stat(){
+ const ps=Object.values(state.progress);const attempted=ps.filter(p=>p.attempts>0);
+ const attempts=ps.reduce((s,p)=>s+p.attempts,0), correct=ps.reduce((s,p)=>s+p.correctCount,0);
+ return{answered:attempted.length,attempts,correct,wrong:ps.filter(p=>p.incorrectCount>0).length,uncertain:ps.filter(p=>p.uncertain).length,favorite:ps.filter(p=>p.favorite).length};
+}
+function countsFor(group){return DB.questions.filter(q=>group==='all'||q.question_group===group).length;}
+function home(){
+ const s=stat(), resumed=state.session&&state.session.ids?.length&&state.session.index<state.session.ids.length;
+ return shell(`
+ <section class="hero"><h1>摂食嚥下認定看護師<br>試験対策338問</h1><p>一般178問＋状況設定160問（61事例）</p></section>
+ ${resumed?`<section class="card" style="margin-bottom:12px"><div style="font-weight:800;margin-bottom:7px">途中の学習があります</div><div class="small">問題 ${state.session.index+1} / ${state.session.ids.length}</div><button class="btn primary block" id="resume" style="margin-top:10px">続きから再開</button></section>`:''}
+ <div class="kpis">
+   <div class="kpi"><strong>${s.answered}</strong><span>学習済み</span></div>
+   <div class="kpi"><strong>${fmtPct(s.correct,s.attempts)}</strong><span>正答率</span></div>
+   <div class="kpi"><strong>${s.wrong}</strong><span>誤答あり</span></div>
+   <div class="kpi"><strong>${s.uncertain}</strong><span>自信なし</span></div>
+ </div>
+ <h2 class="section-title">学習を始める</h2>
+ <div class="grid three">
+   <button class="card action-card" data-start="一般問題"><div class="big">一般問題</div><div class="num">${countsFor('一般問題')}</div><div class="sub">過去問・追加問題・予想問題</div></button>
+   <button class="card action-card" data-start="状況設定・事例問題"><div class="big">状況設定・事例</div><div class="num">${countsFor('状況設定・事例問題')}</div><div class="sub">${DB.meta.cases}事例・事例文を表示</div></button>
+   <button class="card action-card" data-start="all"><div class="big">全問題</div><div class="num">${DB.questions.length}</div><div class="sub">一般＋状況設定を混合</div></button>
+ </div>
+ <h2 class="section-title">復習</h2>
+ <div class="grid three">
+   <button class="card action-card" data-review="wrong"><div class="big">間違えた問題</div><div class="num">${s.wrong}</div><div class="sub">1回以上誤答した問題</div></button>
+   <button class="card action-card" data-review="uncertain"><div class="big">自信なし</div><div class="num">${s.uncertain}</div><div class="sub">自信なしに登録した問題</div></button>
+   <button class="card action-card" data-review="favorite"><div class="big">お気に入り</div><div class="num">${s.favorite}</div><div class="sub">あとで見直したい問題</div></button>
+ </div>
+ <h2 class="section-title">その他</h2>
+ <div class="actions"><button class="btn" data-nav="browse">問題一覧・検索</button><button class="btn" data-nav="settings">設定・バックアップ</button></div>
+ `);
+}
+function setup(group='all',review=null){
+ const isCase=group==='状況設定・事例問題';
+ const domains=[...new Set(DB.questions.filter(q=>group==='all'||q.question_group===group).map(q=>q.domain).filter(Boolean))].sort();
+ const datasets=[...new Set(DB.questions.filter(q=>group==='all'||q.question_group===group).map(q=>q.dataset).filter(Boolean))];
+ const st=view.setup||{group,review,dataset:'all',domain:'all',importance:'all',order:'random',count:isCase?'5':'20'};
+ return shell(`
+ <section class="hero"><h1>${review?reviewLabel(review):group==='all'?'全問題':esc(group)}</h1><p>${review?'復習対象から出題します':'出題条件を選択してください'}</p></section>
+ <section class="card">
+ <div class="form-grid">
+   <label class="field"><span>問題種別</span><select id="group">
+     <option value="all"${st.group==='all'?' selected':''}>一般＋状況設定</option>
+     <option value="一般問題"${st.group==='一般問題'?' selected':''}>一般問題</option>
+     <option value="状況設定・事例問題"${st.group==='状況設定・事例問題'?' selected':''}>状況設定・事例問題</option>
+   </select></label>
+   <label class="field"><span>問題データ</span><select id="dataset"><option value="all">すべて</option>${datasets.map(x=>`<option value="${esc(x)}"${st.dataset===x?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
+   <label class="field"><span>分野</span><select id="domain"><option value="all">すべての分野</option>${domains.map(x=>`<option value="${esc(x)}"${st.domain===x?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
+   <label class="field"><span>重要度</span><select id="importance"><option value="all">すべて</option>${['S+','S','A','B'].map(x=>`<option value="${x}"${st.importance===x?' selected':''}>${x}</option>`).join('')}</select></label>
+   <label class="field"><span>${st.group==='状況設定・事例問題'&&!st.review?'出題事例数':'出題問題数'}</span><select id="count">
+     ${(st.group==='状況設定・事例問題'&&!st.review?['5','10','20','all']:['10','20','50','all']).map(x=>`<option value="${x}"${st.count===x?' selected':''}>${x==='all'?'すべて':x+(st.group==='状況設定・事例問題'&&!st.review?'事例':'問')}</option>`).join('')}
+   </select></label>
+   <label class="field"><span>出題順</span><select id="order"><option value="random"${st.order==='random'?' selected':''}>ランダム</option><option value="sequential"${st.order==='sequential'?' selected':''}>元データ順</option></select></label>
+ </div>
+ <div class="small" id="available" style="margin:14px 0"></div>
+ <button class="btn primary block" id="go">学習を開始</button>
+ </section>`, '出題設定');
+}
+function reviewLabel(x){return x==='wrong'?'間違えた問題':x==='uncertain'?'自信なし':x==='favorite'?'お気に入り':'復習';}
+function setupFilters(){
+ const st=view.setup;
+ let arr=DB.questions.filter(q=>st.group==='all'||q.question_group===st.group);
+ if(st.dataset!=='all')arr=arr.filter(q=>q.dataset===st.dataset);
+ if(st.domain!=='all')arr=arr.filter(q=>q.domain===st.domain);
+ if(st.importance!=='all')arr=arr.filter(q=>q.importance===st.importance);
+ if(st.review==='wrong')arr=arr.filter(q=>(existingProg(q.id)?.incorrectCount||0)>0);
+ if(st.review==='uncertain')arr=arr.filter(q=>!!existingProg(q.id)?.uncertain);
+ if(st.review==='favorite')arr=arr.filter(q=>!!existingProg(q.id)?.favorite);
+ return arr;
+}
+function startFromSetup(){
+ let arr=setupFilters();const st=view.setup;
+ if(!arr.length){toast('条件に一致する問題がありません');return;}
+ let ids=[];
+ if(st.group==='状況設定・事例問題'&&!st.review){
+   const byCase=new Map();arr.forEach(q=>{if(!byCase.has(q.case_id))byCase.set(q.case_id,[]);byCase.get(q.case_id).push(q);});
+   let caseIds=[...byCase.keys()];if(st.order==='random')caseIds=shuffle(caseIds);
+   const n=st.count==='all'?caseIds.length:Number(st.count);caseIds=caseIds.slice(0,n);
+   for(const cid of caseIds){const qs=byCase.get(cid).sort((a,b)=>(Number(a.question_no_in_case)||0)-(Number(b.question_no_in_case)||0));ids.push(...qs.map(q=>q.id));}
+ }else{
+   if(st.order==='random')arr=shuffle(arr);
+   const n=st.count==='all'?arr.length:Number(st.count);ids=arr.slice(0,n).map(q=>q.id);
+ }
+ state.session={ids,index:0,answers:{},config:{...st},startedAt:new Date().toISOString()};saveState();view={name:'quiz'};render();
+}
+function quiz(){
+ const ses=state.session;if(!ses||!ses.ids?.length){view={name:'home'};return home();}
+ if(ses.index>=ses.ids.length){view={name:'result'};return result();}
+ const q=Q.get(ses.ids[ses.index]);if(!q){ses.index++;saveState();return quiz();}
+ const ans=ses.answers[q.id];const p=prog(q.id);const choices=['A','B','C','D'];
+ const pct=((ses.index)/ses.ids.length)*100;
+ return shell(`
+ <div class="quiz-wrap">
+ <div class="q-head"><span>${ses.index+1} / ${ses.ids.length}</span><span style="flex:1"></span><span>${esc(q.domain||'')}</span></div>
+ <div class="progressbar"><span style="width:${pct}%"></span></div>
+ ${q.case_text?`<section class="card case-card" style="margin-top:13px"><h2>${esc(q.case_title||'事例')}</h2>${q.case_tags?`<div class="chips"><span class="chip">${esc(q.case_tags)}</span></div>`:''}<div class="case-text">${text(q.case_text)}</div></section>`:''}
+ <section class="card" style="margin-top:12px">
+  <div class="chips">
+   <span class="chip">${esc(q.question_group)}</span><span class="chip gray">${esc(q.dataset||'')}</span><span class="chip gray">重要度 ${esc(q.importance||'—')}</span>
+   ${q.question_no_in_case?`<span class="chip gray">事例内 問${esc(q.question_no_in_case)}</span>`:''}
+  </div>
+  <div class="q-text">${text(q.question_text)}</div>
+  <div class="options">
+  ${choices.map(L=>{
+    const cls=ans?(L===q.correct_answer?' correct':(L===ans.choice&&L!==q.correct_answer?' wrong':'')):(ans?.choice===L?' selected':'');
+    return `<button class="option${cls}" data-choice="${L}" ${ans?'disabled':''}><span class="letter">${L}</span><span>${text(q['option_'+L])}</span></button>`
+  }).join('')}
+  </div>
+  <div class="toolbar">
+    <button class="btn ${p.uncertain?'active':''}" id="uncertain">△ 自信なし</button>
+    <button class="btn ${p.favorite?'active':''}" id="favorite">☆ お気に入り</button>
+  </div>
+  ${ans?feedback(q,ans):''}
+ </section>
+ ${ans?`<div class="next-sticky"><button class="btn primary block" id="next">${ses.index===ses.ids.length-1?'結果を見る':'次の問題へ'}</button></div>`:''}
+ </div>`, '問題演習');
+}
+function feedback(q,ans){
+ const ok=ans.correct;
+ return `<div class="feedback">
+ <div class="answer-banner ${ok?'ok':'ng'}">${ok?'正解':'不正解'}　正答：${esc(q.correct_answer)} ${esc(q.answer_text||q['option_'+q.correct_answer]||'')}</div>
+ <div class="explain">
+   ${q.explanation?`<h3>解説</h3><div class="text">${text(q.explanation)}</div>`:''}
+   <h3>各選択肢</h3>
+   ${['A','B','C','D'].map(L=>`<details${L===q.correct_answer?' open':''}><summary>${L}. ${esc(q['option_'+L]||'')}</summary><div class="option-exp">${text(q['option_'+L+'_explanation']||'解説なし')}</div></details>`).join('')}
+   ${q.key_points?`<h3>覚えるべきポイント</h3><div class="point">${text(q.key_points)}</div>`:''}
+   ${q.related_knowledge?`<h3>周辺知識</h3><div class="text">${text(q.related_knowledge)}</div>`:''}
+   ${q.repeat_point?`<h3>反復ポイント</h3><div class="text">${text(q.repeat_point)}</div>`:''}
+   ${q.prediction_reason?`<h3>予想理由</h3><div class="text">${text(q.prediction_reason)}</div>`:''}
+   ${q.pitfalls?`<h3>間違えやすいポイント</h3><div class="text">${text(q.pitfalls)}</div>`:''}
+   ${q.mnemonic?`<h3>一言で覚える</h3><div class="point">${text(q.mnemonic)}</div>`:''}
+   ${q.evidence?`<h3>根拠資料</h3><div class="text small">${text(q.evidence)}</div>`:''}
