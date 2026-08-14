@@ -1,0 +1,32 @@
+name: Apply audited data corrections
+
+on:
+  push:
+    branches: [feature/data-audit-fix]
+    paths:
+      - 'scripts/apply_data_audit_fix.py'
+      - '.github/workflows/apply-data-audit-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/data-audit-fix
+      - name: Apply and validate corrections
+        run: python3 scripts/apply_data_audit_fix.py
+      - name: Commit corrected data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          if git diff --cached --quiet; then
+            echo "No data changes to commit"
+            exit 0
+          fi
+          git commit -m "Correct 11 combination question stems"
+          git push origin HEAD:feature/data-audit-fix
