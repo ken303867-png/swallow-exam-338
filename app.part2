@@ -74,12 +74,12 @@ function bind(){
  bindCommon();
  if(view.name==='home'){
   document.querySelector('#resume')?.addEventListener('click',()=>{view={name:'quiz'};render()});
-  document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{view={name:'setup',setup:{group:b.dataset.start,review:null,dataset:'all',domain:'all',importance:'all',order:'random',count:b.dataset.start==='状況設定・事例問題'?'5':'20'}};render()});
-  document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>{view={name:'setup',setup:{group:'all',review:b.dataset.review,dataset:'all',domain:'all',importance:'all',order:'random',count:'20'}};render()});
+  document.querySelectorAll('[data-start]').forEach(b=>b.onclick=()=>{view={name:'setup',setup:{group:b.dataset.start,review:null,dataset:'all',domain:'all',importance:'all',answerStatus:'all',order:'random',count:b.dataset.start==='状況設定・事例問題'?'5':'20'}};render()});
+  document.querySelectorAll('[data-review]').forEach(b=>b.onclick=()=>{view={name:'setup',setup:{group:'all',review:b.dataset.review,dataset:'all',domain:'all',importance:'all',answerStatus:'all',order:'random',count:'20'}};render()});
  }
  if(view.name==='setup'){
-  const update=()=>{const old=view.setup,group=document.querySelector('#group').value;view.setup={...old,group,dataset:document.querySelector('#dataset').value,domain:document.querySelector('#domain').value,importance:document.querySelector('#importance').value,count:document.querySelector('#count').value,order:document.querySelector('#order').value};const a=setupFilters();const cases=new Set(a.map(q=>q.case_id).filter(Boolean));document.querySelector('#available').textContent=`対象：${a.length}問${group==='状況設定・事例問題'&&!view.setup.review?'（'+cases.size+'事例）':''}`;};
-  ['group','dataset','domain','importance','count','order'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',()=>{update();if(id==='group')render();}));update();document.querySelector('#go').onclick=startFromSetup;
+  const update=()=>{const old=view.setup,group=document.querySelector('#group').value;view.setup={...old,group,dataset:document.querySelector('#dataset').value,domain:document.querySelector('#domain').value,importance:document.querySelector('#importance').value,answerStatus:document.querySelector('#answerStatus')?.value||old.answerStatus||'all',count:document.querySelector('#count').value,order:document.querySelector('#order').value};const a=setupFilters();const cases=new Set(a.map(q=>q.case_id).filter(Boolean));document.querySelector('#available').textContent=`対象：${a.length}問${group==='状況設定・事例問題'&&!view.setup.review?'（'+cases.size+'事例）':''}`;};
+  ['group','dataset','domain','importance','answerStatus','count','order'].forEach(id=>document.querySelector('#'+id)?.addEventListener('change',()=>{update();if(id==='group')render();}));update();document.querySelector('#go').onclick=startFromSetup;
  }
  if(view.name==='quiz'){
   document.querySelectorAll('[data-choice]').forEach(b=>b.onclick=()=>answer(b.dataset.choice));
@@ -89,7 +89,7 @@ function bind(){
   const n=document.querySelector('#note');if(n)n.addEventListener('change',()=>{p.note=n.value;p.updatedAt=new Date().toISOString();saveState()});
   document.querySelector('#next')?.addEventListener('click',nextQuestion);
  }
- if(view.name==='result')document.querySelector('#reviewWrong')?.addEventListener('click',()=>{view={name:'setup',setup:{group:'all',review:'wrong',dataset:'all',domain:'all',importance:'all',order:'random',count:'20'}};render()});
+ if(view.name==='result')document.querySelector('#reviewWrong')?.addEventListener('click',()=>{view={name:'setup',setup:{group:'all',review:'wrong',dataset:'all',domain:'all',importance:'all',answerStatus:'all',order:'random',count:'20'}};render()});
  if(view.name==='browse'){
   document.querySelector('#search').addEventListener('input',e=>{view.browseQuery=e.target.value;clearTimeout(view._t);view._t=setTimeout(render,250)});document.querySelector('#bgroup').onchange=e=>{view.browseGroup=e.target.value;render()};document.querySelector('#bdomain').onchange=e=>{view.browseDomain=e.target.value;render()};document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openDetail(b.dataset.open));
  }
