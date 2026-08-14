@@ -1,0 +1,29 @@
+name: Apply missing option explanations
+on:
+  push:
+    branches: [feature/fill-missing-explanations]
+    paths:
+      - 'scripts/fill_missing_option_explanations.py'
+      - '.github/workflows/apply-missing-explanations.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feature/fill-missing-explanations
+      - name: Apply and validate explanation corrections
+        run: python3 scripts/fill_missing_option_explanations.py
+      - name: Commit corrected data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          if git diff --cached --quiet; then
+            echo "No data changes to commit"
+            exit 0
+          fi
+          git commit -m "Fill 11 missing option explanations"
+          git push origin HEAD:feature/fill-missing-explanations
